@@ -1,0 +1,20 @@
+# .itch.toml - Configuration itch.io
+[game]
+version = "1.0.0"
+title = "Ycrad l'Aventurier"
+description = "Un jeu RPG pixel art épique"
+url = "https://votrepseudo.itch.io/ycrad-adventurer"
+
+[build]
+root = "build_itchio"
+include = [
+    "index.html",
+    "pygbag.js",
+    "sw.js",
+    "assets/**",
+    "*.py"
+]
+
+[upload]
+kind = "html"
+file = "index.html"
