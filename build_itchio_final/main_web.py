@@ -132,13 +132,13 @@ class WebGame:
             }
             
             # Character
-            #self.assets["player"] = pygame.image.load("assets/character/player.png").convert_alpha()
+            self.assets["player"] = pygame.image.load("assets/character/player.png").convert_alpha()
             
             # Monsters
-           # self.assets["monsters"] = {
-              #  "slime": pygame.image.load("assets/monsters/slime.png").convert_alpha(),
-             #   "rat": pygame.image.load("assets/monsters/rat.png").convert_alpha()
-            #}
+            self.assets["monsters"] = {
+                "slime": pygame.image.load("assets/monsters/slime.png").convert_alpha(),
+                "rat": pygame.image.load("assets/monsters/rat.png").convert_alpha()
+            }
             
             print("✅ Assets chargés avec succès")
             
