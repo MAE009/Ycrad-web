@@ -69,7 +69,8 @@ def copy_python_files(build_dir):
         'inventory.py',
         'animation.py',
         'tilemap.py',
-        'map_generator.py'
+        'map_generator.py',
+        'asset_generator.py'
     ]
     
     for file in python_files:
