@@ -15,7 +15,7 @@ def build_final():
     os.makedirs(build_dir, exist_ok=True)
     
     # Fichiers HTML essentiels
-    html_files = ['index.html', 'game.html']
+    html_files = ['index.html', 'game_js.html']
     for file in html_files:
         if os.path.exists(file):
             shutil.copy2(file, os.path.join(build_dir, file))
