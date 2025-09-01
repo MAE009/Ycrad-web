@@ -1,180 +1,103 @@
-# environment.py - Gestion des environnements et collisions
+# environment.py - Version avec tilemaps
 import pygame
-import random
-import json
+from tilemap import TileMap
 
 class Environment:
     def __init__(self):
-        self.zones = {
-            "village": {
-                "monsters": [],
-                "npcs": ["marchand", "forgeron"],
-                "background": "village",
-                "music": "village_theme",
-                "collisions": self.generate_village_collisions()
-            },
-            "forest": {
-                "monsters": [("slime", 1), ("rat", 1)],
-                "npcs": ["chasseur"],
-                "background": "forest",
-                "music": "forest_theme",
-                "collisions": self.generate_forest_collisions()
-            },
-            "marsh": {
-                "monsters": [("slime", 2), ("rat", 2)],
-                "npcs": ["ermite"],
-                "background": "marsh",
-                "music": "marsh_theme",
-                "collisions": self.generate_marsh_collisions()
-            }
-        }
-        
+        self.tilemaps = {}
         self.current_zone = "village"
+        self.camera_offset = [0, 0]
+        
+        # Charger les tilemaps
+        self.load_tilemaps()
+        
+        # Monstres et PNJs
         self.monster_instances = []
-        self.generate_monsters()
-        
-    def generate_village_collisions(self):
-        """Génère les collisions pour le village"""
-        collisions = []
-        # Maisons
-        collisions.extend([(100 + i*120, 200, 60, 80) for i in range(5)])
-        # Étage
-        collisions.append((300, 100, 200, 50))
-        # Arbres
-        collisions.extend([(50, 400, 40, 60), (700, 400, 40, 60)])
-        return collisions
+        self.npcs = []
     
-    def generate_forest_collisions(self):
-        """Génère les collisions pour la forêt"""
-        collisions = []
-        # Arbres
-        for i in range(8):
-            x = random.randint(50, 700)
-            y = random.randint(100, 500)
-            collisions.append((x, y, 40, 60))
-        # Rochers
-        for i in range(5):
-            x = random.randint(100, 650)
-            y = random.randint(150, 550)
-            collisions.append((x, y, 30, 30))
-        return collisions
+    def load_tilemaps(self):
+        """Charge les tilemaps pour chaque zone"""
+        zones = ["village", "forest", "marsh", "dungeon"]
+        
+        for zone in zones:
+            try:
+                self.tilemaps[zone] = TileMap(f"assets/maps/{zone}.json")
+                print(f"✅ Tilemap chargée: {zone}")
+            except:
+                print(f"⚠️  Tilemap manquante: {zone}")
+                # Créer une tilemap de fallback
+                self.tilemaps[zone] = TileMap(None)  # Cela créera une fallback
     
-    def generate_marsh_collisions(self):
-        """Génère les collisions pour le marais"""
-        collisions = []
-        # Zones d'eau
-        collisions.extend([(200, 300, 100, 80), (500, 200, 120, 60)])
-        # Arbres morts
-        collisions.extend([(150, 150, 35, 50), (650, 350, 35, 50)])
-        # Rochers
-        for i in range(7):
-            x = random.randint(80, 720)
-            y = random.randint(100, 520)
-            collisions.append((x, y, 25, 25))
-        return collisions
+    def update_camera(self, player_position, screen_width, screen_height):
+        """Met à jour la position de la caméra"""
+        map_width = self.tilemaps[self.current_zone].width * 32
+        map_height = self.tilemaps[self.current_zone].height * 32
+        
+        # Centrer la caméra sur le joueur, mais ne pas dépasser les bords
+        self.camera_offset[0] = max(0, min(
+            player_position[0] - screen_width // 2,
+            map_width - screen_width
+        ))
+        
+        self.camera_offset[1] = max(0, min(
+            player_position[1] - screen_height // 2,
+            map_height - screen_height
+        ))
     
-    def generate_monsters(self):
-        """Génère les instances de monstres pour la zone actuelle"""
-        from monsters import Slime, Rat  # Import circulaire évité
+    def render(self, screen, player_position):
+        """Dessine l'environnement"""
+        # Mettre à jour la caméra
+        self.update_camera(player_position, screen.get_width(), screen.get_height())
         
-        monster_classes = {
-            "slime": Slime,
-            "rat": Rat
-        }
+        # Dessiner les calques de la tilemap
+        current_map = self.tilemaps[self.current_zone]
         
-        self.monster_instances = []
-        zone_data = self.zones[self.current_zone]
+        # Calque d'arrière-plan
+        current_map.render_layer(screen, "background", 
+                               self.camera_offset[0], self.camera_offset[1])
         
-        for monster_type, level in zone_data["monsters"]:
-            # Position aléatoire évitant les collisions
-            for _ in range(10):  # 10 tentatives
-                x = random.randint(100, 700)
-                y = random.randint(100, 500)
-                
-                if not self.check_collision((x, y)):
-                    monster = monster_classes[monster_type](level, [x, y])
-                    self.monster_instances.append(monster)
-                    break
+        # Calque de décoration
+        if "decorations" in current_map.layers:
+            current_map.render_layer(screen, "decorations",
+                                   self.camera_offset[0], self.camera_offset[1])
     
     def check_collision(self, position, size=(20, 20)):
-        """Vérifie les collisions à une position donnée"""
-        pos_x, pos_y = position
-        width, height = size
+        """Vérifie les collisions avec l'environnement"""
+        current_map = self.tilemaps[self.current_zone]
         
-        for collision in self.zones[self.current_zone]["collisions"]:
-            col_x, col_y, col_w, col_h = collision
-            
-            if (pos_x < col_x + col_w and
-                pos_x + width > col_x and
-                pos_y < col_y + col_h and
-                pos_y + height > col_y):
+        # Vérifier les 4 coins du rectangle de collision
+        points = [
+            (position[0], position[1]),  # Haut gauche
+            (position[0] + size[0], position[1]),  # Haut droite
+            (position[0], position[1] + size[1]),  # Bas gauche
+            (position[0] + size[0], position[1] + size[1])  # Bas droite
+        ]
+        
+        for point in points:
+            if current_map.check_collision(point[0], point[1], "collision"):
                 return True
         
         return False
     
-    def get_monsters_in_current_zone(self):
-        """Retourne les monstres de la zone actuelle"""
-        return self.monster_instances
-    
     def get_zone_at_position(self, position):
         """Détermine la zone basée sur la position"""
-        x, y = position
+        # Vérifier les zones de transition dans la tilemap
+        current_map = self.tilemaps[self.current_zone]
+        tile_x = position[0] // 32
+        tile_y = position[1] // 32
         
-        # Zones simples pour la démo
-        if y < 200:
-            return "forest"
-        elif x > 600:
-            return "marsh"
-        else:
-            return "village"
-    
-    def load_zone_monsters(self, zone_name):
-        """Charge les monstres d'une zone spécifique"""
-        if zone_name in self.zones:
-            self.current_zone = zone_name
-            self.generate_monsters()
-    
-    def get_zone_background(self):
-        """Retourne le nom du background de la zone actuelle"""
-        return self.zones[self.current_zone]["background"]
-    
-    def get_zone_music(self):
-        """Retourne la musique de la zone actuelle"""
-        return self.zones[self.current_zone]["music"]
-    
-    def save_state(self):
-        """Sauvegarde l'état de l'environnement"""
-        return {
-            "current_zone": self.current_zone,
-            "monsters": [
-                {
-                    "type": monster.type,
-                    "level": monster.level,
-                    "position": monster.position,
-                    "hp": monster.hp
-                }
-                for monster in self.monster_instances
-            ]
-        }
-    
-    def load_state(self, data):
-        """Charge l'état de l'environnement"""
-        from monsters import Slime, Rat
+        if 0 <= tile_x < current_map.width and 0 <= tile_y < current_map.height:
+            index = tile_y * current_map.width + tile_x
+            if "transitions" in current_map.layers:
+                transition_id = current_map.layers["transitions"][index]
+                if transition_id > 0:
+                    # Mapping des IDs de transition vers les noms de zones
+                    transition_map = {
+                        1: "forest",
+                        2: "marsh",
+                        3: "dungeon",
+                        4: "village"
+                    }
+                    return transition_map.get(transition_id, self.current_zone)
         
-        monster_classes = {
-            "slime": Slime,
-            "rat": Rat
-        }
-        
-        self.current_zone = data.get("current_zone", "village")
-        self.monster_instances = []
-        
-        for monster_data in data.get("monsters", []):
-            monster_type = monster_data["type"]
-            if monster_type in monster_classes:
-                monster = monster_classes[monster_type](
-                    monster_data["level"],
-                    monster_data["position"]
-                )
-                monster.hp = monster_data["hp"]
-                self.monster_instances.append(monster)
+        return self.current_zone
