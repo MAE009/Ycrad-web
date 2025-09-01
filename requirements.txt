@@ -1,9 +1,10 @@
 # Requirements pour Ycrad l'Aventurier
-pygame==2.5.2
+# pygame==2.5.2
 pygbag==0.9.0
 numpy==1.26.4
 pillow==10.2.0
 
-# Requirements pour Render
+# requirements.txt - Utilisez une version spécifique de PyGame
+pygame==2.1.3  # Version plus stable
 flask==2.3.3
 gunicorn==21.2.0
