@@ -6,10 +6,10 @@ build-backend = "pygbag"
 name = "ycrad-adventurer"
 version = "1.0.0"
 description = "Ycrad l'Aventurier - RPG Pixel Art"
-authors = [{name = "Votre Nom", email = "votre@email.com"}]
+authors = [{name = "Votre Studio", email = "contact@votrestudio.com"}]
 
 [tool.pygbag]
-package = "main"
+package = "main_web"
 git = false
 cdn = "https://pygbag-cdn.itch.ovh"
 assets = ["assets/**/*", "*.py"]
