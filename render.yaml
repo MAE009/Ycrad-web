@@ -1,11 +1,11 @@
-# render.yaml - Configuration pour Render
 services:
   - type: web
     name: ycrad-adventurer
-    env: static
-    buildCommand: python build.py
-    staticPublishPath: ./build/web
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    env: python
+    plan: free
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.18
+    autoDeploy: true

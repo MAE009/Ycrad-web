@@ -1,0 +1,11 @@
+# aptfile.txt - Dépendances système pour PyGame
+libsdl2-dev
+libsdl2-image-dev
+libsdl2-mixer-dev
+libsdl2-ttf-dev
+libportmidi-dev
+libswscale-dev
+libavformat-dev
+libavcodec-dev
+libfreetype6-dev
+python3-dev
