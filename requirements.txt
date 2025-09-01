@@ -1,0 +1,5 @@
+# Requirements pour Ycrad l'Aventurier
+pygame==2.5.2
+pygbag==0.9.0
+numpy==1.26.4
+pillow==10.2.0
