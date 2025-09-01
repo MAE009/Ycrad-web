@@ -3,3 +3,7 @@ pygame==2.5.2
 pygbag==0.9.0
 numpy==1.26.4
 pillow==10.2.0
+
+# Requirements pour Render
+flask==2.3.3
+gunicorn==21.2.0
