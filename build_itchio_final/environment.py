@@ -15,8 +15,8 @@ class Environment:
     
     def load_tilemaps(self):
         """Charge les tilemaps pour chaque zone"""
-        #zones = ["village", "forest", "marsh", "dungeon"]
-        zones = ["village"]
+        zones = ["village", "forest", "marsh", "dungeon"]
+        #zones = ["village"]
         
         for zone in zones:
             map_path = f"assets/maps/{zone}.json"
