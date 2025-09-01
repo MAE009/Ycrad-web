@@ -390,6 +390,57 @@ class WebGame:
         print("📂 Chargement rapide")
         # Implémentation du chargement
     
+    
+    # ✅ Vérifie et génère les assets manquants
+    def check_and_generate_assets(self):
+        """Vérifie et génère les assets manquants"""
+        required_assets = [
+            "assets/backgrounds/village.png",
+            "assets/backgrounds/forest.png",
+            "assets/backgrounds/marsh.png",
+            "assets/character/player.png",
+            "assets/monsters/slime.png",
+            "assets/monsters/rat.png",
+            "assets/ui/icons/potion.png",
+            "assets/ui/icons/sword.png",
+            "assets/tilesets/terrain.png"
+        ]
+
+        missing_assets = []
+
+        for asset in required_assets:
+            if not os.path.exists(asset):
+                missing_assets.append(asset)
+
+        if missing_assets:
+            print(f"⚠️  Assets manquants détectés: {len(missing_assets)}")
+            print("🔄 Génération des assets de fallback...")
+
+            try:
+                from asset_generator import AssetGenerator
+                generator = AssetGenerator()
+                generator.generate_all_assets()
+                print("✅ Assets générés avec succès!")
+            except Exception as e:
+                print(f"❌ Erreur lors de la génération des assets: {e}")
+                # Créer des placeholders minimalistes
+                self.create_minimal_assets()
+
+    # ✅ Création d’assets minimalistes en cas d’erreur
+    def create_minimal_assets(self):
+        """Crée des assets minimalistes en cas d'erreur"""
+        os.makedirs("assets/backgrounds", exist_ok=True)
+
+        # Créer un background minimal
+        bg = pygame.Surface((800, 600))
+        bg.fill((50, 50, 100))  # Fond bleu foncé
+        pygame.image.save(bg, "assets/backgrounds/village.png")
+
+        print("✅ Assets minimalistes créés")
+
+
+    
+    
     def restart_game(self):
         """Redémarre le jeu"""
         self.initialize_game()
