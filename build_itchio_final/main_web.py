@@ -52,17 +52,22 @@ class WebGame:
     
     def initialize_game(self):
         """Initialise les systèmes de jeu"""
+        # Dans main_web.py - Modifiez initialize_game
+
+        # Vérifier et générer les assets
+        self.check_and_generate_assets()
+    
         # Créer le joueur
         self.player = Player("Ycrad", "warrior")
-        
+    
         # Créer l'inventaire
         self.inventory = Inventory(self.player)
-        
+    
         # Créer l'UI
         self.ui = UI(self.player, self.inventory, self.quest_manager, game_config)
-        
-        # Vérifier les assets
-        self.check_assets()
+    
+        # Charger les assets
+        self.load_assets()
     
     def check_assets(self):
         """Vérifie et génère les assets si nécessaire"""
