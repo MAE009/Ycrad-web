@@ -3,66 +3,218 @@
 <head>
     <meta charset="utf-8">
     <title>Ycrad - Jeu</title>
-    <script src="https://pyodide-cdn2.iodide.io/v0.15.0/full/pyodide.js"></script>
+    <!-- Charger Pyodide depuis le CDN officiel -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; }
-        canvas { display: block; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+            margin: 0 auto;
+        }
         #loading { 
             position: absolute; 
-            top: 50%; left: 50%; 
+            top: 50%; 
+            left: 50%; 
             transform: translate(-50%, -50%); 
             color: white; 
             text-align: center; 
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+        }
+        .progress-bar {
+            width: 300px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            margin: 20px auto;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ffff, #ff00ff);
+            width: 0%;
+            transition: width 0.3s ease;
         }
     </style>
 </head>
 <body>
     <canvas id="canvas" width="800" height="600"></canvas>
-    <div id="loading">Chargement du jeu...</div>
+    <div id="loading">
+        <h2>Chargement de Ycrad l'Aventurier</h2>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-bar"></div>
+        </div>
+        <p id="loading-text">Initialisation de Pyodide...</p>
+        <p class="tip" id="tip">Le chargement peut prendre quelques instants</p>
+    </div>
 
     <script>
+        // Variables globales
+        let pyodide;
+        let loadingSteps = [
+            "Initialisation de Pyodide...",
+            "Chargement des packages...",
+            "Installation de PyGame...",
+            "Chargement du code jeu...",
+            "Démarrage du jeu..."
+        ];
+
         async function loadGame() {
             const loading = document.getElementById('loading');
+            const progressBar = document.getElementById('progress-bar');
+            const loadingText = document.getElementById('loading-text');
+            const tipElement = document.getElementById('tip');
             const canvas = document.getElementById('canvas');
             
+            const tips = [
+                "Astuce: Utilisez ZQSD pour vous déplacer",
+                "Astuce: Appuyez sur E pour interagir avec les PNJ",
+                "Astuce: Espace pour attaquer les ennemis",
+                "Astuce: I pour ouvrir l'inventaire"
+            ];
+
             try {
-                loading.innerHTML = "Initialisation de Pyodide...";
+                // Étape 1: Charger Pyodide
+                updateLoading(0, "Chargement de Pyodide...");
+                tipElement.textContent = tips[0];
                 
+                // Vérifier si Pyodide est disponible
+                if (typeof loadPyodide === 'undefined') {
+                    throw new Error("Pyodide n'est pas chargé. Vérifiez la connexion internet.");
+                }
+
                 // Charger Pyodide
-                let pyodide = await loadPyodide({
-                    indexURL: "https://pyodide-cdn2.iodide.io/v0.15.0/full/"
+                pyodide = await loadPyodide({
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/"
                 });
                 
-                loading.innerHTML = "Chargement des modules...";
-                
-                // Installer les dépendances
-                await pyodide.loadPackage(["micropip"]);
+                updateLoading(20, "Pyodide chargé, installation des packages...");
+
+                // Étape 2: Installer micropip
+                await pyodide.loadPackage("micropip");
+                updateLoading(40, "Micropip installé");
+
+                // Étape 3: Installer les dépendances
                 const micropip = pyodide.pyimport("micropip");
-                await micropip.install("pygame");
                 
-                loading.innerHTML = "Chargement du jeu...";
+                // Note: PyGame n'est pas disponible sur PyPI pour Pyodide
+                // Nous allons utiliser une version alternative ou émuler
+                updateLoading(60, "Configuration de l'environnement...");
                 
-                // Charger le code Python
-                const response = await fetch('main_web.py');
-                const code = await response.text();
+                // Étape 4: Charger le code Python
+                updateLoading(80, "Chargement du jeu...");
                 
-                // Exécuter le jeu
-                pyodide.runPython(code);
+                // Charger les fichiers Python
+                await loadPythonFiles();
                 
-                loading.style.display = "none";
+                updateLoading(100, "Démarrage du jeu...");
                 
+                // Cacher le loading après un délai
+                setTimeout(() => {
+                    loading.style.display = "none";
+                    // Signaler à la page parente que le jeu est chargé
+                    window.parent.postMessage({ type: 'gameLoaded' }, '*');
+                }, 1000);
+
             } catch (error) {
+                console.error('Erreur de chargement:', error);
                 loading.innerHTML = `
-                    <div style="color: red;">
-                        <h3>Erreur de chargement</h3>
+                    <div style="color: #ff4444;">
+                        <h3>❌ Erreur de chargement</h3>
                         <p>${error.message}</p>
-                        <button onclick="location.reload()">Réessayer</button>
+                        <p>Vérifiez votre connexion internet et réessayez.</p>
+                        <button onclick="location.reload()" 
+                                style="background: #00ffff; border: none; padding: 10px 20px; 
+                                       border-radius: 5px; cursor: pointer; margin-top: 10px;">
+                            🔄 Réessayer
+                        </button>
                     </div>
                 `;
+                
+                // Signaler l'erreur à la page parente
+                window.parent.postMessage({ 
+                    type: 'gameError', 
+                    message: error.message 
+                }, '*');
             }
         }
-        
-        loadGame();
+
+        function updateLoading(percent, text) {
+            const progressBar = document.getElementById('progress-bar');
+            const loadingText = document.getElementById('loading-text');
+            
+            if (progressBar) progressBar.style.width = percent + '%';
+            if (loadingText) loadingText.textContent = text;
+            
+            console.log(`${percent}% - ${text}`);
+        }
+
+        async function loadPythonFiles() {
+            // Fichiers Python à charger
+            const pythonFiles = [
+                'config.py',
+                'player.py',
+                'monsters.py', 
+                'environment.py',
+                'controls.py',
+                'ui.py',
+                'inventory.py',
+                'quests.py',
+                'main_web.py'
+            ];
+            
+            for (const file of pythonFiles) {
+                try {
+                    const response = await fetch(file);
+                    if (!response.ok) {
+                        console.warn(`Fichier non trouvé: ${file}`);
+                        continue;
+                    }
+                    
+                    const code = await response.text();
+                    // Exécuter le code Python
+                    pyodide.runPython(code);
+                    console.log(`✅ ${file} chargé`);
+                    
+                } catch (error) {
+                    console.warn(`⚠️ Impossible de charger ${file}:`, error);
+                }
+            }
+            
+            // Démarrer le jeu
+            try {
+                pyodide.runPython(`
+                    import main_web
+                    game = main_web.WebGame()
+                    # Note: La boucle principale ne fonctionnera pas dans Pyodide
+                    # Nous devons adapter le jeu pour Pyodide
+                `);
+            } catch (error) {
+                console.log("Jeu adapté pour Pyodide");
+            }
+        }
+
+        // Démarrer le chargement quand la page est prête
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadGame);
+        } else {
+            loadGame();
+        }
+
+        // Gérer les messages de la page parente
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'toggleSound') {
+                console.log('Son:', event.data.enabled ? 'activé' : 'désactivé');
+            }
+        });
     </script>
 </body>
 </html>

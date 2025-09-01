@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Ycrad - Version JavaScript</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+        canvas { display: block; }
+        #loading { 
+            position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            color: white; text-align: center; 
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="loading">Chargement de la version JavaScript...</div>
+
+    <script>
+        // Version JavaScript simplifiée du jeu
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+        
+        // État du jeu
+        const gameState = {
+            player: { x: 400, y: 300, speed: 5, direction: 'down' },
+            monsters: [],
+            background: null,
+            assets: {}
+        };
+        
+        // Charger les assets
+        async function loadAssets() {
+            loading.textContent = "Chargement des images...";
+            
+            try {
+                // Charger les images
+                gameState.assets.background = await loadImage('assets/backgrounds/village.png');
+                gameState.assets.player = await loadImage('assets/character/player.png');
+                gameState.assets.slime = await loadImage('assets/monsters/slime.png');
+                
+                loading.style.display = 'none';
+                startGame();
+                
+            } catch (error) {
+                loading.innerHTML = `
+                    <div style="color: red;">
+                        <h3>Erreur de chargement</h3>
+                        <p>${error.message}</p>
+                        <button onclick="location.reload()">Réessayer</button>
+                    </div>
+                `;
+            }
+        }
+        
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error(`Impossible de charger ${src}`));
+                img.src = src;
+            });
+        }
+        
+        function startGame() {
+            // Logique de jeu simplifiée en JavaScript
+            function gameLoop() {
+                update();
+                render();
+                requestAnimationFrame(gameLoop);
+            }
+            
+            function update() {
+                // Logique de mise à jour simplifiée
+            }
+            
+            function render() {
+                // Dessiner l'arrière-plan
+                if (gameState.assets.background) {
+                    ctx.drawImage(gameState.assets.background, 0, 0);
+                }
+                
+                // Dessiner le joueur
+                if (gameState.assets.player) {
+                    ctx.drawImage(gameState.assets.player, gameState.player.x, gameState.player.y);
+                }
+                
+                // Dessiner les monstres
+                gameState.monsters.forEach(monster => {
+                    if (gameState.assets.slime) {
+                        ctx.drawImage(gameState.assets.slime, monster.x, monster.y);
+                    }
+                });
+                
+                // UI simplifiée
+                ctx.fillStyle = 'white';
+                ctx.font = '16px Arial';
+                ctx.fillText('Ycrad l\'Aventurier - Version Démo', 20, 30);
+                ctx.fillText('Utilisez les flèches pour vous déplacer', 20, 50);
+            }
+            
+            // Contrôles
+            document.addEventListener('keydown', (e) => {
+                switch(e.key) {
+                    case 'ArrowUp': gameState.player.y -= gameState.player.speed; break;
+                    case 'ArrowDown': gameState.player.y += gameState.player.speed; break;
+                    case 'ArrowLeft': gameState.player.x -= gameState.player.speed; break;
+                    case 'ArrowRight': gameState.player.x += gameState.player.speed; break;
+                }
+            });
+            
+            // Démarrer la boucle de jeu
+            gameLoop();
+            
+            // Signaler que le jeu est chargé
+            window.parent.postMessage({ type: 'gameLoaded' }, '*');
+        }
+        
+        // Démarrer le chargement
+        loadAssets();
+    </script>
+</body>
+</html>
