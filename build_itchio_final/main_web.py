@@ -1,328 +1,422 @@
-# main_web.py - Version navigateur de Ycrad l'Aventurier
+# main_web.py - Point d'entrée principal avec toutes les améliorations
 import pygame
 import sys
-import asyncio
-import json
 import os
-from pathlib import Path
+import asyncio
+from player import Player
+from environment import Environment
+from quests import QuestManager
+from inventory import Inventory
+from ui import UI
+from monsters import MonsterFactory
+from config import game_config
+from animation import AnimationManager
+from tilemap import TileMap
+from map_generator import MapGenerator
 
-# Configuration spéciale pour le web
-class WebConfig:
-    def __init__(self):
-        self.is_web = True
-        self.assets_path = "assets/"
-        self.save_path = "/idb/ycrad_saves/"
-            
-        # Configuration par défaut adaptée au web
-        self.settings = {
-            "graphics": {
-                "resolution": [800, 600],
-                "fullscreen": False,
-                "vsync": True,
-                "framerate": 60
-            },
-            "audio": {
-                "music_volume": 0.6,
-                "sound_volume": 0.7,
-                "mute": False
-            },
-            "controls": {
-                "touch_enabled": True,
-                "keyboard_enabled": True
-            }
-        }
-        
-    def get(self, category, key, default=None):
-        return self.settings.get(category, {}).get(key, default)
-
-# Gestionnaire d'assets pour le web
-class WebAssetManager:
-    def __init__(self):
-        self.assets = {}
-        self.loaded = False
-        
-    async def load_assets(self):
-        """Charge les assets de manière asynchrone"""
-        if self.loaded:
-            return
-            
-        # Créer des assets de base programmatiquement pour le web
-        self.assets = {
-            "player": self.create_surface((32, 32), (0, 0, 255)),
-            "monsters": {
-                "slime": self.create_surface((32, 32), (0, 255, 0)),
-                "rat": self.create_surface((32, 32), (139, 69, 19)),
-            },
-            "npcs": {
-                "merchant": self.create_surface((32, 32), (255, 0, 0)),
-                "blacksmith": self.create_surface((32, 32), (100, 100, 100)),
-            }
-        }
-            
-        # Essayer de charger les vrais assets si disponibles
-        try:
-            await self.load_real_assets()
-        except Exception as e:
-            print(f"Impossible de charger les assets: {e}")
-            
-        self.loaded = True
-        
-    def create_surface(self, size, color):
-        """Crée une surface avec une couleur unie"""
-        surf = pygame.Surface(size)
-        surf.fill(color)
-        return surf
-        
-    async def load_real_assets(self):
-        """Tente de charger les vrais assets"""
-        asset_files = {
-            "player": "character/player.png",
-            "monsters/slime": "monsters/slime.png",
-            "monsters/rat": "monsters/rat.png",
-        }
-            
-        for key, path in asset_files.items():
-            try:
-                full_path = "assets/" + path
-                if await self.file_exists(full_path):
-                    if "/" in key:
-                        parts = key.split("/")
-                        category = parts[0]
-                        subkey = parts[1]
-                        if category not in self.assets:
-                            self.assets[category] = {}
-                        self.assets[category][subkey] = await self.load_image(full_path)
-                    else:
-                        self.assets[key] = await self.load_image(full_path)
-            except Exception as e:
-                print(f"Erreur chargement {path}: {e}")
-        
-    async def file_exists(self, path):
-        """Vérifie si un fichier existe (simulation pour le web)"""
-        return False  # Simulation
-    
-    async def load_image(self, path):
-        """Charge une image (simulation pour le web)"""
-        return self.create_surface((32, 32), (255, 0, 0))
-
-# Système de sauvegarde pour le web (IndexedDB)
-class WebSaveSystem:
-    def __init__(self):
-        self.ready = False
-        
-    async def initialize(self):
-        """Initialise le système de sauvegarde"""
-        try:
-            self.ready = True
-        except Exception as e:
-            print(f"Erreur initialisation sauvegarde: {e}")
-            self.ready = False
-        
-    async def save_game(self, data, slot=0):
-        """Sauvegarde la partie"""
-        if not self.ready:
-            return False
-        return True
-        
-    async def load_game(self, slot=0):
-        """Charge une partie"""
-        if not self.ready:
-            return None
-        return None
-
-# Version web du jeu principal
 class WebGame:
     def __init__(self):
         # Initialisation de base
         pygame.init()
         pygame.font.init()
-            
-        # Configuration web
-        self.config = WebConfig()
-            
-        # Fenêtre
-        self.screen = pygame.display.set_mode(
-            self.config.get("graphics", "resolution")
-        )
+        
+        # Configuration
+        self.screen = pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Ycrad l'Aventurier")
-            
-        # Timing
         self.clock = pygame.time.Clock()
-        self.dt = 0
-        self.fps = self.config.get("graphics", "framerate")
         self.running = True
-            
-        # États
-        self.game_state = "loading"
+        self.dt = 0
+        self.fps = game_config.get("graphics", "framerate", 60)
+        
+        # États du jeu
+        self.game_state = "loading"  # loading, menu, playing, combat, inventory, game_over
         self.loading_progress = 0
-            
-        # Systèmes
-        self.asset_manager = WebAssetManager()
-        self.save_system = WebSaveSystem()
-            
-        # Initialisation différée
+        self.loading_message = "Initialisation..."
+        
+        # Systèmes principaux
         self.player = None
-        from environment import Environment
         self.environment = Environment()
+        self.quest_manager = QuestManager()
+        self.inventory = None
         self.ui = None
-            
-        # Contrôles web
-        self.setup_web_controls()
+        self.animation_manager = AnimationManager()
         
-    def setup_web_controls(self):
-        """Configure les contrôles spécifiques au web"""
-        try:
-            import js
-            js.document.addEventListener('joystickMove', self.handle_joystick)
-            js.document.addEventListener('gameButton', self.handle_game_button)
-        except ImportError:
-            print("Mode navigateur non détecté, contrôles web désactivés")
+        # Assets
+        self.assets = {}
         
-    def handle_joystick(self, event):
-        if hasattr(event, 'detail'):
-            dx, dy = event.detail['x'], event.detail['y']
-            self.virtual_joystick = (dx, dy)
+        # Contrôles
+        self.keys_pressed = {}
         
-    def handle_game_button(self, event):
-        if hasattr(event, 'detail'):
-            button = event.detail
-            if button == 'interact':
-                self.virtual_button_interact = True
-            elif button == 'attack':
-                self.virtual_button_attack = True
-            elif button == 'inventory':
-                self.virtual_button_inventory = True
+        # Initialisation différée
+        self.initialize_game()
+    
+    def initialize_game(self):
+        """Initialise les systèmes de jeu"""
+        # Créer le joueur
+        self.player = Player("Ycrad", "warrior")
         
-    async def load_game_assets(self):
-        """Charge les assets du jeu de manière asynchrone"""
-        self.game_state = "loading"
-        self.loading_progress = 0
-            
-        # Initialiser le système de sauvegarde
-        await self.save_system.initialize()
-        self.loading_progress = 20
-            
-        # Charger les assets
-        await self.asset_manager.load_assets()
-        self.loading_progress = 50
-
-        # Vérifier/générer les maps
+        # Créer l'inventaire
+        self.inventory = Inventory(self.player)
+        
+        # Créer l'UI
+        self.ui = UI(self.player, self.inventory, self.quest_manager, game_config)
+        
+        # Vérifier les assets
+        self.check_assets()
+    
+    def check_assets(self):
+        """Vérifie et génère les assets si nécessaire"""
         if not os.path.exists("assets/maps/village.json"):
-            print("🔄 Génération des maps de fallback...")
-            from map_generator import MapGenerator
+            self.loading_message = "Génération des maps..."
             generator = MapGenerator()
             generator.generate_all_maps()
-
+        
         # Charger les tilemaps
         self.environment.load_tilemaps()
-        self.loading_progress = 80
-            
-        # Initialiser les systèmes de jeu
-        await self.initialize_game_systems()
-        self.loading_progress = 100
+    
+    async def load_assets_async(self):
+        """Charge les assets de manière asynchrone"""
+        self.game_state = "loading"
+        
+        steps = [
+            ("Chargement des configurations...", 10),
+            ("Génération des maps...", 30),
+            ("Chargement des tilemaps...", 50),
+            ("Chargement des sprites...", 70),
+            ("Initialisation des systèmes...", 90),
+            ("Démarrage du jeu...", 100)
+        ]
+        
+        for message, progress in steps:
+            self.loading_message = message
+            self.loading_progress = progress
+            await asyncio.sleep(0.1)  # Simuler le chargement
+        
         self.game_state = "menu"
-        
-    async def initialize_game_systems(self):
-        from player import Player
-        from ui import UI
-        self.player = Player("Ycrad", "warrior")
-        self.ui = UI(self.player, None, None, self.config)
-        
-    async def run(self):
-        await self.load_game_assets()
-        while self.running:
-            await self.handle_events()
-            self.update()
-            self.render()
-            await asyncio.sleep(0)
-            self.dt = self.clock.tick(self.fps) / 1000.0
-        
-    async def handle_events(self):
+    
+    def handle_events(self):
+        """Gère tous les événements"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            if self.game_state == "menu":
-                await self.handle_menu_events(event)
-            elif self.game_state == "playing":
-                await self.handle_playing_events(event)
+            
+            # Gestion des touches
+            elif event.type == pygame.KEYDOWN:
+                self.keys_pressed[event.key] = True
+                self.handle_keydown(event)
+            
+            elif event.type == pygame.KEYUP:
+                self.keys_pressed[event.key] = False
+            
+            # Gestion de l'UI
+            if self.ui:
+                self.ui.handle_event(event, self)
+    
+    def handle_keydown(self, event):
+        """Gère les appuis de touches"""
+        key_actions = {
+            pygame.K_ESCAPE: self.toggle_pause,
+            pygame.K_i: self.toggle_inventory,
+            pygame.K_q: self.toggle_quests,
+            pygame.K_e: self.handle_interaction,
+            pygame.K_SPACE: self.handle_attack,
+            pygame.K_r: self.restart_game if self.game_state == "game_over" else None,
+            pygame.K_F5: self.quick_save,
+            pygame.K_F9: self.quick_load
+        }
         
-    async def handle_menu_events(self, event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-            await self.start_new_game()
-        
-    async def handle_playing_events(self, event):
-        pass
-        
-    async def start_new_game(self):
-        self.game_state = "playing"
-        
+        action = key_actions.get(event.key)
+        if action:
+            action()
+    
+    def toggle_pause(self):
+        """Met en pause/reprend le jeu"""
+        if self.game_state == "playing":
+            self.game_state = "pause"
+        elif self.game_state == "pause":
+            self.game_state = "playing"
+    
+    def toggle_inventory(self):
+        """Ouvre/ferme l'inventaire"""
+        if self.game_state == "playing":
+            self.game_state = "inventory"
+        elif self.game_state == "inventory":
+            self.game_state = "playing"
+    
+    def toggle_quests(self):
+        """Affiche/cache les quêtes"""
+        if self.ui:
+            self.ui.show_quests = not self.ui.show_quests
+    
+    def handle_interaction(self):
+        """Gère l'interaction avec l'environnement"""
+        if self.game_state == "playing":
+            # Logique d'interaction avec les PNJs
+            pass
+    
+    def handle_attack(self):
+        """Gère l'attaque"""
+        if self.game_state == "playing":
+            self.player.is_attacking = True
+    
     def update(self):
-        if self.game_state == "playing" and self.player:
-            self.update_game_state()
+        """Met à jour la logique du jeu"""
+        self.dt = self.clock.get_time() / 1000.0  # Convertir en secondes
         
-    def update_game_state(self):
-        if hasattr(self, 'virtual_joystick'):
-            dx, dy = self.virtual_joystick
-            new_pos = (self.player.position[0] + dx, self.player.position[1] + dy)
-            if not self.environment.check_collision(new_pos):
-                self.player.position = new_pos
-        if hasattr(self, 'virtual_button_interact'):
-            self.virtual_button_interact = False
-        if hasattr(self, 'virtual_button_attack'):
-            self.virtual_button_attack = False
-        if hasattr(self, 'virtual_button_inventory'):
-            self.virtual_button_inventory = False
+        if self.game_state == "playing":
+            self.update_playing_state()
+        elif self.game_state == "combat":
+            self.update_combat_state()
         
+        # Mettre à jour les animations
+        self.animation_manager.update(self.dt)
+    
+    def update_playing_state(self):
+        """Met à jour l'état de jeu normal"""
+        # Gestion des entrées de mouvement
+        dx, dy = 0, 0
+        if self.keys_pressed.get(pygame.K_LEFT) or self.keys_pressed.get(pygame.K_a) or self.keys_pressed.get(pygame.K_q):
+            dx = -1
+            self.player.direction = "left"
+        if self.keys_pressed.get(pygame.K_RIGHT) or self.keys_pressed.get(pygame.K_d):
+            dx = 1
+            self.player.direction = "right"
+        if self.keys_pressed.get(pygame.K_UP) or self.keys_pressed.get(pygame.K_w) or self.keys_pressed.get(pygame.K_z):
+            dy = -1
+            self.player.direction = "up"
+        if self.keys_pressed.get(pygame.K_DOWN) or self.keys_pressed.get(pygame.K_s):
+            dy = 1
+            self.player.direction = "down"
+        
+        # Déplacement du joueur
+        if dx != 0 or dy != 0:
+            self.player.is_moving = True
+            new_x = self.player.position[0] + dx * self.player.speed
+            new_y = self.player.position[1] + dy * self.player.speed
+            
+            # Vérifier les collisions
+            if not self.environment.check_collision([new_x, new_y]):
+                self.player.position[0] = new_x
+                self.player.position[1] = new_y
+        else:
+            self.player.is_moving = False
+        
+        # Vérifier les changements de zone
+        new_zone = self.environment.get_zone_at_position(self.player.position)
+        if new_zone != self.environment.current_zone:
+            new_pos = self.environment.change_zone(new_zone, self.player.position)
+            self.player.position = list(new_pos)
+        
+        # Mettre à jour les animations
+        self.update_animations()
+        
+        # Vérifier les quêtes
+        self.quest_manager.check_triggers(self.player.position)
+    
+    def update_combat_state(self):
+        """Met à jour l'état de combat"""
+        # Logique de combat tour par tour
+        pass
+    
+    def update_animations(self):
+        """Met à jour les animations"""
+        # Animation du joueur
+        if self.player.is_attacking:
+            animation_name = f"attack_{self.player.direction}"
+            self.player.is_attacking = False
+        elif self.player.is_moving:
+            animation_name = f"walk_{self.player.direction}"
+        else:
+            animation_name = f"idle_{self.player.direction}"
+        
+        self.animation_manager.play_animation("player", animation_name)
+    
     def render(self):
-        self.screen.fill((0, 0, 0))
+        """Affiche le jeu"""
+        self.screen.fill((0, 0, 0))  # Clear screen
+        
         if self.game_state == "loading":
             self.render_loading_screen()
         elif self.game_state == "menu":
             self.render_menu()
-        elif self.game_state == "playing":
+        elif self.game_state in ["playing", "combat", "inventory"]:
             self.render_game()
+        elif self.game_state == "game_over":
+            self.render_game_over()
+        elif self.game_state == "pause":
+            self.render_pause()
+        
         pygame.display.flip()
-        
+    
     def render_loading_screen(self):
-        font = pygame.font.SysFont("Arial", 24)
-        bar_width, bar_height = 400, 30
-        bar_x, bar_y = (800 - bar_width) // 2, 300
-        pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
-        pygame.draw.rect(self.screen, (0, 255, 255),
-                         (bar_x, bar_y, bar_width * self.loading_progress / 100, bar_height))
-        text = font.render(f"Chargement... {self.loading_progress}%", True, (255, 255, 255))
-        self.screen.blit(text, (400 - text.get_width() // 2, 250))
+        """Affiche l'écran de chargement"""
+        # Fond
+        self.screen.fill((0, 0, 50))
         
-    def render_menu(self):
+        # Titre
         font = pygame.font.SysFont("Arial", 36)
+        title = font.render("Ycrad l'Aventurier", True, (255, 215, 0))
+        self.screen.blit(title, (400 - title.get_width() // 2, 150))
+        
+        # Barre de progression
+        bar_width = 400
+        bar_height = 30
+        bar_x = 400 - bar_width // 2
+        bar_y = 250
+        
+        pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+        pygame.draw.rect(self.screen, (0, 255, 255), 
+                        (bar_x, bar_y, bar_width * self.loading_progress / 100, bar_height))
+        
+        # Texte de chargement
+        loading_font = pygame.font.SysFont("Arial", 20)
+        loading_text = loading_font.render(self.loading_message, True, (255, 255, 255))
+        self.screen.blit(loading_text, (400 - loading_text.get_width() // 2, 220))
+        
+        # Pourcentage
+        percent_text = loading_font.render(f"{self.loading_progress}%", True, (255, 255, 255))
+        self.screen.blit(percent_text, (400 - percent_text.get_width() // 2, 290))
+        
+        # Conseils
+        tips = [
+            "Astuce: Utilisez ZQSD pour vous déplacer",
+            "Astuce: Appuyez sur E pour interagir",
+            "Astuce: Espace pour attaquer les ennemis",
+            "Astuce: I pour ouvrir l'inventaire"
+        ]
+        tip_index = int(pygame.time.get_ticks() / 4000) % len(tips)
+        tip_text = loading_font.render(tips[tip_index], True, (200, 200, 200))
+        self.screen.blit(tip_text, (400 - tip_text.get_width() // 2, 330))
+    
+    def render_menu(self):
+        """Affiche le menu principal"""
+        self.screen.fill((0, 0, 50))
+        
+        # Titre
         title_font = pygame.font.SysFont("Arial", 48, bold=True)
         title = title_font.render("YCRAD L'AVENTURIER", True, (255, 215, 0))
         self.screen.blit(title, (400 - title.get_width() // 2, 100))
-        options = ["Nouvelle Partie", "Charger", "Options", "Quitter"]
+        
+        # Sous-titre
+        subtitle_font = pygame.font.SysFont("Arial", 24)
+        subtitle = subtitle_font.render("RPG Pixel Art Épique", True, (200, 200, 200))
+        self.screen.blit(subtitle, (400 - subtitle.get_width() // 2, 160))
+        
+        # Options du menu
+        options = ["Nouvelle Partie", "Charger Partie", "Options", "Quitter"]
+        option_font = pygame.font.SysFont("Arial", 32)
+        
         for i, option in enumerate(options):
             color = (255, 255, 255) if i == 0 else (150, 150, 150)
-            text = font.render(option, True, color)
-            self.screen.blit(text, (400 - text.get_width() // 2, 200 + i * 60))
+            text = option_font.render(option, True, color)
+            self.screen.blit(text, (400 - text.get_width() // 2, 250 + i * 60))
         
+        # Copyright
+        copyright_font = pygame.font.SysFont("Arial", 16)
+        copyright = copyright_font.render("© 2024 Votre Studio - Version Web", True, (100, 100, 100))
+        self.screen.blit(copyright, (400 - copyright.get_width() // 2, 500))
+    
     def render_game(self):
-        if not self.player:
-            return
-        # Dessiner la tilemap
+        """Affiche le jeu en cours"""
+        # Dessiner l'environnement
         self.environment.render(self.screen, self.player.position)
-        # Joueur
-        player_sprite = self.asset_manager.assets["player"]
-        screen_x = self.player.position[0] - self.environment.camera_offset[0]
-        screen_y = self.player.position[1] - self.environment.camera_offset[1]
-        self.screen.blit(player_sprite, (screen_x, screen_y))
-        # UI
+        
+        # Dessiner le joueur
+        player_frame = self.animation_manager.get_current_frame()
+        if player_frame:
+            # Convertir les coordonnées monde vers écran
+            screen_x = self.player.position[0] - self.environment.camera_offset[0]
+            screen_y = self.player.position[1] - self.environment.camera_offset[1]
+            self.screen.blit(player_frame, (screen_x, screen_y))
+        else:
+            # Fallback
+            pygame.draw.rect(self.screen, (0, 0, 255), 
+                           (self.player.position[0] - 16, self.player.position[1] - 16, 32, 32))
+        
+        # Dessiner l'UI
         if self.ui:
             self.ui.draw(self.screen, self.game_state)
+        
+        # Mode pause
+        if self.game_state == "pause":
+            self.render_pause_overlay()
+    
+    def render_game_over(self):
+        """Affiche l'écran de game over"""
+        self.screen.fill((0, 0, 0))
+        
+        # Message
+        font = pygame.font.SysFont("Arial", 48)
+        game_over = font.render("GAME OVER", True, (255, 0, 0))
+        self.screen.blit(game_over, (400 - game_over.get_width() // 2, 200))
+        
+        # Score
+        score_font = pygame.font.SysFont("Arial", 24)
+        if self.player:
+            score_text = score_font.render(f"Niveau atteint: {self.player.level}", True, (255, 255, 255))
+            self.screen.blit(score_text, (400 - score_text.get_width() // 2, 270))
+        
+        # Instructions
+        instruct_font = pygame.font.SysFont("Arial", 20)
+        instruct = instruct_font.render("Appuyez sur R pour recommencer", True, (255, 215, 0))
+        self.screen.blit(instruct, (400 - instruct.get_width() // 2, 320))
+    
+    def render_pause(self):
+        """Affiche l'écran de pause"""
+        self.render_game()
+        self.render_pause_overlay()
+    
+    def render_pause_overlay(self):
+        """Affiche l'overlay de pause"""
+        overlay = pygame.Surface((800, 600), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        self.screen.blit(overlay, (0, 0))
+        
+        font = pygame.font.SysFont("Arial", 48)
+        text = font.render("PAUSE", True, (255, 255, 255))
+        self.screen.blit(text, (400 - text.get_width() // 2, 250))
+        
+        instruct_font = pygame.font.SysFont("Arial", 20)
+        instruct = instruct_font.render("Appuyez sur Échap pour continuer", True, (200, 200, 200))
+        self.screen.blit(instruct, (400 - instruct.get_width() // 2, 320))
+    
+    def quick_save(self):
+        """Sauvegarde rapide"""
+        print("💾 Sauvegarde rapide")
+        # Implémentation de la sauvegarde
+    
+    def quick_load(self):
+        """Chargement rapide"""
+        print("📂 Chargement rapide")
+        # Implémentation du chargement
+    
+    def restart_game(self):
+        """Redémarre le jeu"""
+        self.initialize_game()
+        self.game_state = "playing"
+    
+    async def run(self):
+        """Boucle principale asynchrone"""
+        # Chargement initial
+        await self.load_assets_async()
+        
+        # Boucle de jeu
+        while self.running:
+            self.handle_events()
+            self.update()
+            self.render()
+            
+            await asyncio.sleep(0)  # Yield to event loop
+            self.clock.tick(self.fps)
+        
+        pygame.quit()
+        sys.exit()
 
-# Point d'entrée asynchrone pour le web
+# Point d'entrée asynchrone
 async def main():
     game = WebGame()
     await game.run()
-    pygame.quit()
-    
+
+# Lancement du jeu
 if __name__ == "__main__":
     asyncio.run(main())
