@@ -117,6 +117,67 @@ class WebGame:
             if self.ui:
                 self.ui.handle_event(event, self)
     
+    
+
+    def load_assets(self):
+        """Charge les assets dans un dictionnaire"""
+        self.assets = {}
+        
+        try:
+            # Backgrounds
+            self.assets["backgrounds"] = {
+                "village": pygame.image.load("assets/backgrounds/village.png").convert(),
+                "forest": pygame.image.load("assets/backgrounds/forest.png").convert(),
+                "marsh": pygame.image.load("assets/backgrounds/marsh.png").convert()
+            }
+            
+            # Character
+            self.assets["player"] = pygame.image.load("assets/character/player.png").convert_alpha()
+            
+            # Monsters
+            self.assets["monsters"] = {
+                "slime": pygame.image.load("assets/monsters/slime.png").convert_alpha(),
+                "rat": pygame.image.load("assets/monsters/rat.png").convert_alpha()
+            }
+            
+            print("✅ Assets chargés avec succès")
+            
+        except Exception as e:
+            print(f"❌ Erreur chargement assets: {e}")
+            self.create_fallback_assets()
+
+    
+    def create_fallback_assets(self):
+        """Crée des assets de fallback programmatiquement"""
+        self.assets = {
+            "backgrounds": {
+                "village": pygame.Surface((800, 600)),
+                "forest": pygame.Surface((800, 600)),
+                "marsh": pygame.Surface((800, 600))
+            },
+            "player": pygame.Surface((32, 32), pygame.SRCALPHA),
+            "monsters": {
+                "slime": pygame.Surface((32, 32), pygame.SRCALPHA),
+                "rat": pygame.Surface((32, 32), pygame.SRCALPHA)
+            }
+        }
+        
+        # Couleurs de fallback
+        self.assets["backgrounds"]["village"].fill((200, 200, 100))
+        self.assets["backgrounds"]["forest"].fill((0, 100, 0))
+        self.assets["backgrounds"]["marsh"].fill((70, 50, 30))
+        
+        # Joueur fallback (carré bleu)
+        self.assets["player"].fill((0, 0, 255))
+        
+        # Monstres fallback
+        self.assets["monsters"]["slime"].fill((0, 255, 0))
+        self.assets["monsters"]["rat"].fill((139, 69, 19))
+        
+        print("✅ Assets de fallback créés")
+    
+
+    
     def handle_keydown(self, event):
         """Gère les appuis de touches"""
         key_actions = {
