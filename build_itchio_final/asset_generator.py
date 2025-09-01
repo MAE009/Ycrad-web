@@ -112,7 +112,7 @@ class AssetGenerator:
         # Épée
         pygame.draw.rect(sprite, (200, 200, 200), (20, 14, 8, 4))
         
-        #pygame.image.save(sprite, "assets/character/player.png")
+        pygame.image.save(sprite, "assets/character/player.png")
         self.assets_created += 1
         print(f"👤 Généré: assets/character/player.png")
     
@@ -136,7 +136,7 @@ class AssetGenerator:
             else:
                 pygame.draw.rect(sprite, color, (8, 8, 16, 16))
             
-            #pygame.image.save(sprite, f"assets/monsters/{name}.png")
+            pygame.image.save(sprite, f"assets/monsters/{name}.png")
             self.assets_created += 1
             print(f"🐉 Généré: assets/monsters/{name}.png")
     
@@ -165,7 +165,7 @@ class AssetGenerator:
                 pygame.draw.circle(icon, color, (16, 16), 10)
                 pygame.draw.circle(icon, (200, 150, 0), (16, 16), 8)
             
-            #pygame.image.save(icon, f"assets/ui/icons/{name}.png")
+            pygame.image.save(icon, f"assets/ui/icons/{name}.png")
             self.assets_created += 1
             print(f"🎯 Généré: assets/ui/icons/{name}.png")
     
@@ -191,7 +191,7 @@ class AssetGenerator:
         # Tile 5: Sable
         pygame.draw.rect(tileset, (200, 180, 100), (32, 32, 32, 32))
         
-        #pygame.image.save(tileset, "assets/tilesets/terrain.png")
+        pygame.image.save(tileset, "assets/tilesets/terrain.png")
         self.assets_created += 1
         print(f"🧱 Généré: assets/tilesets/terrain.png")
 
