@@ -119,6 +119,12 @@ class ControlSystem:
                 elif control["type"] == "joystick" and not pressed:
                     control["active"] = False
                     self.virtual_joystick = (0, 0)
+                    
+                    # ✅ Remise à zéro des directions
+                    self.move_left = False
+                    self.move_right = False
+                    self.move_up = False
+                    self.move_down = False
     
     def handle_mouse_motion(self, pos):
         """Gère le mouvement de souris/glissement tactile"""
@@ -138,17 +144,17 @@ class ControlSystem:
             dx = dx / distance * joystick["max_distance"]
             dy = dy / distance * joystick["max_distance"]
         
-        # Normaliser et stocker
+        # Normaliser et stocker - AUGMENTER LA SENSIBILITÉ
         norm_dx = dx / joystick["max_distance"]
         norm_dy = dy / joystick["max_distance"]
         
         self.virtual_joystick = (norm_dx, norm_dy)
         
-        # Convertir en directions booléennes
-        self.move_left = norm_dx < -0.3
-        self.move_right = norm_dx > 0.3
-        self.move_up = norm_dy < -0.3
-        self.move_down = norm_dy > 0.3
+        # Convertir en directions booléennes - SEUIL PLUS BAS
+        self.move_left = norm_dx < -0.2  # Changé de -0.3 à -0.2
+        self.move_right = norm_dx > 0.2   # Changé de 0.3 à 0.2
+        self.move_up = norm_dy < -0.2     # Changé de -0.3 à -0.2
+        self.move_down = norm_dy > 0.2    # Changé de 0.3 à 0.2
     
     def get_movement_vector(self):
         """Retourne le vecteur de mouvement normalisé"""
@@ -197,12 +203,20 @@ class ControlSystem:
             joystick["center"][1] + joy_y * joystick["max_distance"]
         )
         pygame.draw.circle(screen, (200, 200, 200, 200), stick_pos, 20)
-    
+    # Dans controls.py - Amélioration de draw_button
     def draw_button(self, screen, button):
-        """Dessine un bouton tactile"""
-        # Fond
-        color = (100, 100, 100, 150) if not button["pressed"] else (150, 150, 150, 200)
+        """Dessine un bouton tactile avec meilleur feedback"""
+        # Fond semi-transparent
         s = pygame.Surface((button["rect"].width, button["rect"].height), pygame.SRCALPHA)
+        
+        # Couleur différente selon l'état
+        if button["pressed"]:
+            color = (150, 150, 150, 180)  # Pressé
+        elif button["rect"].collidepoint(pygame.mouse.get_pos()):
+            color = (120, 120, 120, 150)  # Survollé
+        else:
+            color = (100, 100, 100, 120)  # Normal
+        
         pygame.draw.circle(s, color, 
                           (button["rect"].width//2, button["rect"].height//2),
                           button["rect"].width//2)
@@ -213,6 +227,13 @@ class ControlSystem:
         text = font.render(button["icon"], True, (255, 255, 255))
         text_rect = text.get_rect(center=button["rect"].center)
         screen.blit(text, text_rect)
+        
+        # Contour de debug (optionnel)
+        if __debug__:  # Seulement en mode debug
+            pygame.draw.circle(screen, (255, 0, 0), button["rect"].center, 
+                             button["rect"].width//2, 1)
+    
+    
     
     def update(self):
         """Met à jour l'état des contrôles"""
@@ -220,3 +241,8 @@ class ControlSystem:
         for control in self.touch_controls:
             if control["type"] == "button":
                 control["pressed"] = False
+        # ✅ Sécurité : si le joystick est inactif -> stop mouvement
+        if self.virtual_joystick == (0, 0):
+            self.move_left = self.move_right = False
+            self.move_up = self.move_down = False
+        

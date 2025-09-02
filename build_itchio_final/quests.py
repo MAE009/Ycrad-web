@@ -29,10 +29,11 @@ class Quest:
         return False
 
 class QuestManager:
-    def __init__(self):
+    def __init__(self, quests=[]):
         self.active_quests = []
         self.completed_quests = []
         self.available_quests = self.initialize_quests()
+        self.quests = quests
     
     def initialize_quests(self):
         """Initialise les quêtes disponibles"""
@@ -67,6 +68,16 @@ class QuestManager:
                 self.active_quests.append(quest)
                 return quest
         return None
+    
+    # nouvelle méthode
+    def check_triggers(self, player_position):
+        """
+        Vérifie si une quête se déclenche selon la position du joueur.
+        """
+        for quest in self.quests:
+            if hasattr(quest, "trigger_position") and quest.trigger_position == player_position:
+                print(f"Quête déclenchée: {quest.name}")
+                # ici tu peux lancer la quête, afficher dialogue, etc.
     
     def complete_quest(self, quest):
         """Termine une quête et donne les récompenses"""

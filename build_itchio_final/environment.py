@@ -55,23 +55,18 @@ class Environment:
             current_map.render_layer(screen, layer_name,
                                    self.camera_offset[0], self.camera_offset[1])
     
+    # Dans environment.py - Optimiser check_collision
     def check_collision(self, position, size=(20, 20)):
-        """Vérifie les collisions avec l'environnement"""
-        current_map = self.tilemaps[self.current_zone]
+        """Vérifie les collisions avec l'environnement - OPTIMISÉ"""
+        # Vérifier UN SEUL point au centre pour gagner en performance
+        center_x = position[0] + size[0] / 2
+        center_y = position[1] + size[1] / 2
         
-        # Vérifier les 4 coins du rectangle de collision
-        points = [
-            (position[0], position[1]),
-            (position[0] + size[0], position[1]),
-            (position[0], position[1] + size[1]),
-            (position[0] + size[0], position[1] + size[1])
-        ]
+        current_map = self.tilemaps.get(self.current_zone)
+        if current_map:
+            return current_map.check_collision(center_x, center_y)
         
-        for point in points:
-            if current_map.check_collision(point[0], point[1]):
-                return True
-        
-        return False
+        return False  # Pas de collision si pas de map
     
     def get_zone_at_position(self, position):
         """Détermine la zone basée sur la position"""

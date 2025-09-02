@@ -10,6 +10,7 @@ from inventory import Inventory
 from ui import UI
 from monsters import MonsterFactory
 from config import game_config
+from controls import ControlSystem
 from animation import AnimationManager
 from tilemap import TileMap
 from map_generator import MapGenerator
@@ -32,6 +33,23 @@ class WebGame:
         self.game_state = "loading"  # loading, menu, playing, combat, inventory, game_over
         self.loading_progress = 0
         self.loading_message = "Initialisation..."
+        
+        self.fps = 60
+        self.last_fps_time = 0
+        self.current_fps = 0
+        self.frame_count = 0
+        
+        
+    
+        # Détection automatique mobile/desktop
+        self.is_mobile = self.detect_mobile()
+        self.touch_controls_enabled = self.is_mobile  # Auto-détection
+        
+        # Initialiser les contrôles
+        self.controls = ControlSystem()
+        self.keys_pressed = {}  # Pour le clavier
+        
+        # ... suite de l'initialisation ...
         
         # Systèmes principaux
         self.player = None
@@ -61,13 +79,34 @@ class WebGame:
         self.player = Player("Ycrad", "warrior")
     
         # Créer l'inventaire
-        self.inventory = Inventory(self.player)
+        self.inventory = Inventory(max_size=20)
     
         # Créer l'UI
-        self.ui = UI(self.player, self.inventory, self.quest_manager, game_config)
+        self.ui = UI(self.player, self.inventory, self.quest_manager, game_config, self)
     
         # Charger les assets
         self.load_assets()
+    
+    
+    def detect_mobile(self):
+        """Détection optimisée pour Android"""
+        try:
+            # Méthode pour Android
+            import android
+            return True
+        except ImportError:
+            try:
+                # Méthode pour Pydroid
+                import os
+                if 'ANDROID_APP_PATH' in os.environ:
+                    return True
+                # Vérifier la taille de l'écran
+                import pygame
+                info = pygame.display.Info()
+                return info.current_w <= 1280 and info.current_h <= 720
+            except:
+                return False
+    
     
     def check_assets(self):
         """Vérifie et génère les assets si nécessaire"""
@@ -78,11 +117,9 @@ class WebGame:
         
         # Charger les tilemaps
         self.environment.load_tilemaps()
-    
-    async def load_assets_async(self):
-        """Charge les assets de manière asynchrone"""
-        self.game_state = "loading"
         
+    async def load_assets_async(self):
+        self.game_state = "loading"
         steps = [
             ("Chargement des configurations...", 10),
             ("Génération des maps...", 30),
@@ -91,12 +128,14 @@ class WebGame:
             ("Initialisation des systèmes...", 90),
             ("Démarrage du jeu...", 100)
         ]
-        
+    
         for message, progress in steps:
             self.loading_message = message
             self.loading_progress = progress
-            await asyncio.sleep(0.1)  # Simuler le chargement
-        
+            self.render()           # <-- dessiner le loading screen
+            pygame.display.flip()   # <-- mettre à jour l’écran
+            await asyncio.sleep(0.2)  # un petit délai pour que l’utilisateur voit
+    
         self.game_state = "menu"
     
     def handle_events(self):
@@ -105,22 +144,41 @@ class WebGame:
             if event.type == pygame.QUIT:
                 self.running = False
             
-            # Gestion des touches
+            # Gestion des événements USEREVENT pour l'attaque
+            elif event.type == pygame.USEREVENT:
+                if hasattr(self.player, 'is_attacking'):
+                    self.player.is_attacking = False
+            
+            # Gestion des contrôles tactiles
+            if self.touch_controls_enabled and hasattr(self, 'controls'):
+                self.controls.handle_event(event)
+            
+            # Gestion du clavier (pour le desktop)
             elif event.type == pygame.KEYDOWN:
                 self.keys_pressed[event.key] = True
-                self.handle_keydown(event)
+                if event.key == pygame.K_ESCAPE:
+                    self.toggle_pause()
+                elif event.key == pygame.K_SPACE:
+                    if hasattr(self.player, 'attack'):
+                        self.player.attack()
+                elif event.key == pygame.K_i:
+                    self.toggle_inventory()
+                elif event.key == pygame.K_e:
+                    self.handle_interaction()
             
             elif event.type == pygame.KEYUP:
                 self.keys_pressed[event.key] = False
+    
             
             # Gestion de l'UI
             if self.ui:
                 self.ui.handle_event(event, self)
     
     
-
+    
+    
     def load_assets(self):
-        """Charge les assets dans un dictionnaire"""
+        """ Charge les assets dans un dictionnaire """
         self.assets = {}
         
         try:
@@ -145,7 +203,7 @@ class WebGame:
         except Exception as e:
             print(f"❌ Erreur chargement assets: {e}")
             self.create_fallback_assets()
-
+    
     
     def create_fallback_assets(self):
         """Crée des assets de fallback programmatiquement"""
@@ -225,47 +283,68 @@ class WebGame:
         if self.game_state == "playing":
             self.player.is_attacking = True
     
+    # Dans main_web.py - RÉÉCRITURE COMPLÈTE de update()
     def update(self):
-        """Met à jour la logique du jeu"""
-        self.dt = self.clock.get_time() / 1000.0  # Convertir en secondes
-        
+        """Boucle principale d'update"""
+        self.dt = self.clock.get_time() / 1000.0  
+    
         if self.game_state == "playing":
-            self.update_playing_state()
-        elif self.game_state == "combat":
-            self.update_combat_state()
-        
-        # Mettre à jour les animations
-        self.animation_manager.update(self.dt)
+            self.handle_movement()
+    
+        self.clock.tick(60)
+    
+    def handle_movement(self):
+        """Récupère les contrôles et déplace le joueur"""
+        dx, dy = self.controls.get_movement_vector()
+    
+        if dx != 0 or dy != 0:
+            self.player.move(dx, dy)  # ✅ utilise la méthode Player
+        else:
+            self.player.is_moving = False
+    
+    
     
     def update_playing_state(self):
         """Met à jour l'état de jeu normal"""
-        # Gestion des entrées de mouvement
-        dx, dy = 0, 0
-        if self.keys_pressed.get(pygame.K_LEFT) or self.keys_pressed.get(pygame.K_a) or self.keys_pressed.get(pygame.K_q):
-            dx = -1
-            self.player.direction = "left"
-        if self.keys_pressed.get(pygame.K_RIGHT) or self.keys_pressed.get(pygame.K_d):
-            dx = 1
-            self.player.direction = "right"
-        if self.keys_pressed.get(pygame.K_UP) or self.keys_pressed.get(pygame.K_w) or self.keys_pressed.get(pygame.K_z):
-            dy = -1
-            self.player.direction = "up"
-        if self.keys_pressed.get(pygame.K_DOWN) or self.keys_pressed.get(pygame.K_s):
-            dy = 1
-            self.player.direction = "down"
-        
-        # Déplacement du joueur
-        if dx != 0 or dy != 0:
-            self.player.is_moving = True
-            new_x = self.player.position[0] + dx * self.player.speed
-            new_y = self.player.position[1] + dy * self.player.speed
+        # Utiliser les contrôles tactiles en priorité si activés
+        if self.touch_controls_enabled and hasattr(self, 'controls'):
+            dx, dy = self.controls.get_movement_vector()
             
-            # Vérifier les collisions
-            if not self.environment.check_collision([new_x, new_y]):
-                self.player.position[0] = new_x
-                self.player.position[1] = new_y
+            # Mettre à jour la direction du joueur
+            if dx > 0: self.player.direction = "right"
+            elif dx < 0: self.player.direction = "left"
+            if dy > 0: self.player.direction = "down"
+            elif dy < 0: self.player.direction = "up"
+            
+            self.player.is_moving = (dx != 0 or dy != 0)
+            
         else:
-            self.player.is_moving = False
+            # Contrôles clavier (fallback)
+            dx, dy = 0, 0
+            if self.keys_pressed.get(pygame.K_LEFT) or self.keys_pressed.get(pygame.K_a) or self.keys_pressed.get(pygame.K_q):
+                dx = -1
+                self.player.direction = "left"
+            if self.keys_pressed.get(pygame.K_RIGHT) or self.keys_pressed.get(pygame.K_d):
+                dx = 1
+                self.player.direction = "right"
+            if self.keys_pressed.get(pygame.K_UP) or self.keys_pressed.get(pygame.K_w) or self.keys_pressed.get(pygame.K_z):
+                dy = -1
+                self.player.direction = "up"
+            if self.keys_pressed.get(pygame.K_DOWN) or self.keys_pressed.get(pygame.K_s):
+                dy = 1
+                self.player.direction = "down"
+            
+            self.player.is_moving = (dx != 0 or dy != 0)
+            
+            # Appliquer le mouvement
+            if dx != 0 or dy != 0:
+                new_x = self.player.position[0] + dx * self.player.speed
+                new_y = self.player.position[1] + dy * self.player.speed
+                
+                # Vérifier les collisions
+                if not self.environment.check_collision([new_x, new_y]):
+                    self.player.position[0] = new_x
+                    self.player.position[1] = new_y
         
         # Vérifier les changements de zone
         new_zone = self.environment.get_zone_at_position(self.player.position)
@@ -284,23 +363,107 @@ class WebGame:
         # Logique de combat tour par tour
         pass
     
+   
+    
     def update_animations(self):
-        """Met à jour les animations"""
+        """Met à jour les animations - Version corrigée"""
+        # Vérifier que l'attribut existe
+        if not hasattr(self.player, 'is_attacking'):
+            self.player.is_attacking = False
+        if not hasattr(self.player, 'is_moving'):
+            self.player.is_moving = False
+        if not hasattr(self.player, 'direction'):
+            self.player.direction = "down"
+        
         # Animation du joueur
         if self.player.is_attacking:
             animation_name = f"attack_{self.player.direction}"
-            self.player.is_attacking = False
         elif self.player.is_moving:
             animation_name = f"walk_{self.player.direction}"
         else:
             animation_name = f"idle_{self.player.direction}"
         
-        self.animation_manager.play_animation("player", animation_name)
+        # Jouer l'animation si le système d'animation existe
+        if hasattr(self, 'animation_manager'):
+            self.animation_manager.play_animation("player", animation_name)
     
-    def render(self):
-        """Affiche le jeu"""
-        self.screen.fill((0, 0, 0))  # Clear screen
+    
+    def handle_events(self):
+        """Gère tous les événements - Version corrigée"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            # Gestion des événements USEREVENT pour l'attaque
+            elif event.type == pygame.USEREVENT:
+                if hasattr(self.player, 'is_attacking'):
+                    self.player.is_attacking = False
+            
+            # Gestion des contrôles tactiles
+            if self.touch_controls_enabled:
+                self.controls.handle_event(event)
+            
+            # Gestion du clavier (pour le desktop)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.toggle_pause()
+                elif event.key == pygame.K_SPACE:
+                    if hasattr(self.player, 'attack'):
+                        self.player.attack()
+                elif event.key == pygame.K_i:
+                    self.toggle_inventory()
+    
+    
+    
+    
+    # main_web.py - Ajouter ces méthodes à la classe WebGame
+    def start_new_game(self):
+        """Démarre une nouvelle partie"""
+        print("🔄 Démarrage d'une nouvelle partie...")
         
+        # Réinitialiser tous les systèmes
+        self.player = Player("Ycrad", "warrior")
+        self.inventory = Inventory(max_size=20)
+        self.quest_manager = QuestManager()
+        #self.environment = Environment()
+        
+        # Réinitialiser la position
+        self.player.position = [400, 300]
+        
+        # Charger les assets si nécessaire
+        if not self.assets:
+            self.load_assets()
+        
+        # Passer à l'état de jeu
+        self.game_state = "playing"
+        self.render()
+        print("✅ Nouvelle partie démarrée!")
+    
+    def load_game(self):
+        """Charge une partie existante"""
+        print("📂 Tentative de chargement...")
+        # Pour l'instant, juste un message
+        self.ui.add_message("Fonctionnalité de chargement à implémenter")
+        # Vous pouvez aussi démarrer une nouvelle partie en attendant
+        self.start_new_game()
+    
+    def open_options(self):
+        """Ouvre le menu des options"""
+        print("⚙️ Ouverture des options...")
+        self.ui.add_message("Menu options à implémenter")
+        # Rester dans le menu pour l'instant
+  
+    def render(self):
+        """Affiche le jeu avec optimisation"""
+        self.screen.fill((0, 0, 0))
+        
+        # Debug FPS
+        debug_font = pygame.font.SysFont("Arial", 16)
+        fps_text = debug_font.render(f"FPS: {self.current_fps}", True, 
+                                   (255, 0, 0) if self.current_fps < 50 else (0, 255, 0))
+        self.screen.blit(fps_text, (10, 10))
+        
+        # Rendu selon l'état
         if self.game_state == "loading":
             self.render_loading_screen()
         elif self.game_state == "menu":
@@ -314,10 +477,11 @@ class WebGame:
         
         pygame.display.flip()
     
+    
     def render_loading_screen(self):
         """Affiche l'écran de chargement"""
         # Fond
-        self.screen.fill((0, 0, 50))
+        self.screen.fill((0, 0, 0))
         
         # Titre
         font = pygame.font.SysFont("Arial", 36)
@@ -353,42 +517,28 @@ class WebGame:
         tip_index = int(pygame.time.get_ticks() / 4000) % len(tips)
         tip_text = loading_font.render(tips[tip_index], True, (200, 200, 200))
         self.screen.blit(tip_text, (400 - tip_text.get_width() // 2, 330))
-    
+        
     def render_menu(self):
         """Affiche le menu principal"""
-        self.screen.fill((0, 0, 50))
-        
-        # Titre
-        title_font = pygame.font.SysFont("Arial", 48, bold=True)
-        title = title_font.render("YCRAD L'AVENTURIER", True, (255, 215, 0))
-        self.screen.blit(title, (400 - title.get_width() // 2, 100))
-        
-        # Sous-titre
-        subtitle_font = pygame.font.SysFont("Arial", 24)
-        subtitle = subtitle_font.render("RPG Pixel Art Épique", True, (200, 200, 200))
-        self.screen.blit(subtitle, (400 - subtitle.get_width() // 2, 160))
-        
-        # Options du menu
-        options = ["Nouvelle Partie", "Charger Partie", "Options", "Quitter"]
-        option_font = pygame.font.SysFont("Arial", 32)
-        
-        for i, option in enumerate(options):
-            color = (255, 255, 255) if i == 0 else (150, 150, 150)
-            text = option_font.render(option, True, color)
-            self.screen.blit(text, (400 - text.get_width() // 2, 250 + i * 60))
-        
-        # Copyright
-        copyright_font = pygame.font.SysFont("Arial", 16)
-        copyright = copyright_font.render("© 2024 Votre Studio - Version Web", True, (100, 100, 100))
-        self.screen.blit(copyright, (400 - copyright.get_width() // 2, 500))
+        if self.ui:
+            self.ui.draw(self.screen, "menu")
+        else:
+            # Fallback si l'UI n'est pas initialisée
+            self.screen.fill((0, 0, 50))
+            font = pygame.font.SysFont("Arial", 36)
+            text = font.render("Menu Principal", True, (255, 255, 255))
+            self.screen.blit(text, (400 - text.get_width() // 2, 250))
+    
     
     def render_game(self):
         """Affiche le jeu en cours"""
         # Dessiner l'environnement
         self.environment.render(self.screen, self.player.position)
+        if self.touch_controls_enabled:
+            self.controls.draw_touch_controls(self.screen)
         
         # Dessiner le joueur
-        player_frame = self.animation_manager.get_current_frame()
+        player_frame = self.animation_manager.get_current_frame(self.player)
         if player_frame:
             # Convertir les coordonnées monde vers écran
             screen_x = self.player.position[0] - self.environment.camera_offset[0]
@@ -409,23 +559,8 @@ class WebGame:
     
     def render_game_over(self):
         """Affiche l'écran de game over"""
-        self.screen.fill((0, 0, 0))
-        
-        # Message
-        font = pygame.font.SysFont("Arial", 48)
-        game_over = font.render("GAME OVER", True, (255, 0, 0))
-        self.screen.blit(game_over, (400 - game_over.get_width() // 2, 200))
-        
-        # Score
-        score_font = pygame.font.SysFont("Arial", 24)
-        if self.player:
-            score_text = score_font.render(f"Niveau atteint: {self.player.level}", True, (255, 255, 255))
-            self.screen.blit(score_text, (400 - score_text.get_width() // 2, 270))
-        
-        # Instructions
-        instruct_font = pygame.font.SysFont("Arial", 20)
-        instruct = instruct_font.render("Appuyez sur R pour recommencer", True, (255, 215, 0))
-        self.screen.blit(instruct, (400 - instruct.get_width() // 2, 320))
+        if self.ui:
+            self.ui.draw(self.screen, "game_over")
     
     def render_pause(self):
         """Affiche l'écran de pause"""
@@ -512,6 +647,10 @@ class WebGame:
         self.initialize_game()
         self.game_state = "playing"
     
+    
+        
+    
+    
     async def run(self):
         """Boucle principale asynchrone"""
         # Chargement initial
@@ -524,7 +663,8 @@ class WebGame:
             self.render()
             
             await asyncio.sleep(0)  # Yield to event loop
-            self.clock.tick(self.fps)
+            self.clock.tick(self.fps)   # limite à 60 FPS
+            #self.clock.tick(self.fps)
         
         pygame.quit()
         sys.exit()

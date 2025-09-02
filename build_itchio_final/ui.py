@@ -3,11 +3,16 @@ import pygame
 import math
 
 class UI:
-    def __init__(self, player, inventory, quest_manager, config):
+    def __init__(self, player, inventory, quest_manager, config, game):
         self.player = player
         self.inventory = inventory
         self.quest_manager = quest_manager
         self.config = config
+        self.menu_options = ["Nouvelle Partie", "Charger", "Options", "Quitter"]
+        self.menu_rects = []  # stockera les zones cliquables
+        self.selected_menu = 0
+        self.selected_option = None
+        self.game = game
         
         # Polices
         self.fonts = {
@@ -251,30 +256,43 @@ class UI:
         if int(self.animation_time / 500) % 2 == 0:  # Clignotement
             continue_text = self.fonts["small"].render("Appuyez sur ENTREE", True, self.colors["highlight"])
             screen.blit(continue_text, (70, 470))
-    
+            
+            
     def draw_main_menu(self, screen):
-        """Dessine le menu principal"""
         # Fond
         screen.fill((0, 0, 50))
-        
-        # Titre avec effet
+    
+        # Titre
         title = self.fonts["title"].render("YCRAD L'AVENTURIER", True, self.colors["highlight"])
         screen.blit(title, (400 - title.get_width() // 2, 100))
-        
-        # Sous-titre
-        subtitle = self.fonts["medium"].render("RPG Pixel Art Épique", True, self.colors["text"])
-        screen.blit(subtitle, (400 - subtitle.get_width() // 2, 150))
-        
+    
         # Options du menu
-        options = ["Nouvelle Partie", "Charger", "Options", "Quitter"]
-        for i, option in enumerate(options):
-            color = self.colors["highlight"] if i == 0 else self.colors["text"]
-            text = self.fonts["large"].render(option, True, color)
-            screen.blit(text, (400 - text.get_width() // 2, 220 + i * 60))
+        self.menu_rects = []
+        y = 200
         
+        for option in self.menu_options:
+            text_surface = self.fonts["large"].render(option, True, (225, 225, 225))
+            rect = text_surface.get_rect(center=(400, y))
+            screen.blit(text_surface, rect)
+            self.menu_rects.append((rect, option))
+            
+            # Détecter clic ici
+            if pygame.mouse.get_pressed()[0]:  # bouton gauche
+                if rect.collidepoint(pygame.mouse.get_pos()):
+                    self.selected_option = option
+                    if option == "Nouvelle Partie":
+                        self.game.start_new_game()
+                    elif option == "Quitter":
+                        pygame.quit()
+                        sys.exit()
+        
+            y += 50
+
+    
         # Copyright
-        copyright = self.fonts["small"].render("© 2024 Votre Studio - Version Web", True, self.colors["text"])
+        copyright = self.fonts["small"].render("© 2024 Votre Studio - Version Web ui", True, self.colors["text"])
         screen.blit(copyright, (400 - copyright.get_width() // 2, 500))
+    
     
     def draw_game_over(self, screen):
         """Dessine l'écran de game over"""
@@ -292,15 +310,37 @@ class UI:
         restart = self.fonts["medium"].render("Appuyez sur R pour recommencer", True, self.colors["highlight"])
         screen.blit(restart, (400 - restart.get_width() // 2, 330))
     
-    def handle_event(self, event, game):
-        """Gère les événements de l'interface"""
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_i and game.game_state == "playing":
-                game.game_state = "inventory"
-            elif event.key == pygame.K_i and game.game_state == "inventory":
+    # ui.py - Modifications dans la méthode handle_event
+def handle_event(self, event, game):
+    """Gère les événements de l'interface"""
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_i and game.game_state == "playing":
+            game.game_state = "inventory"
+        elif event.key == pygame.K_i and game.game_state == "inventory":
+            game.game_state = "playing"
+        elif event.key == pygame.K_q:
+            self.show_quests = not self.show_quests
+        elif event.key == pygame.K_ESCAPE:
+            if game.game_state == "inventory":
                 game.game_state = "playing"
-            elif event.key == pygame.K_q:
-                self.show_quests = not self.show_quests
-            elif event.key == pygame.K_ESCAPE:
-                if game.game_state == "inventory":
-                    game.game_state = "playing"
+                
+    # elif event.type == pygame.MOUSEBUTTONDOWN:
+    #     if self.game.game_state == "menu":  # <-- ONLY handle clicks in menu state
+            
+    #         pos = pygame.mouse.get_pos()
+    #         for rect, option in self.menu_rects:
+    #             if rect.collidepoint(pos):
+    #                 self.selected_option = option
+    #                 print(f"Option sélectionnée: {option}")  # Debug
+                    
+    #                 # Appeler les méthodes appropriées sur l'instance de jeu
+    #                 if option == "Nouvelle Partie":
+    #                     game.start_new_game()
+    #                 elif option == "Charger":
+    #                     game.load_game()
+    #                 elif option == "Options":
+    #                     game.open_options()
+    #                 elif option == "Quitter":
+    #                     pygame.quit()
+    #                     sys.exit()
+    #                 break  # Sortir après avoir trouvé l'option cliquée       
